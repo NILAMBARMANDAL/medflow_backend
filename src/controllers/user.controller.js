@@ -101,12 +101,13 @@ const generateAccessTokenAndRefreshToken = async (userId) => {
 
     return { accessToken, refreshToken };
     }catch(error){
+        console.error("🚨 DETAILED TOKEN FAULT:", error);
         throw new ApiError(500, "something went wrong while generating refresh and acccess token");
     }
 };
 const loginUser = asyncHandler(async (req, res) => {
    const { email,username, password } = req.body;
-   if(!email && !username){
+   if(!(email || username)){
     throw new ApiError(400, "Please provide either email or username to login");
    }
    const user = await User.findOne({

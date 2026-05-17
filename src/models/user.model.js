@@ -53,11 +53,11 @@ const userSchema = new Schema(
 );
 
 // 🔒 Pre-save Hook: Hashes the password automatically right before saving it to MongoDB
-userSchema.pre("save", async function (next) {
-    if (!this.isModified("password")) return next();
+// 🔒 Pre-save Hook: Hashes the password automatically right before saving it to MongoDB
+userSchema.pre("save", async function () { 
+    if (!this.isModified("password")) return; 
 
     this.password = await bcrypt.hash(this.password, 10);
-   // next(); // ☘️ next is the first and only parameter, so this works perfectly!
 });
 
 // 🛠️ Custom Instance Method: Checks if the typed password matches the hashed database password
@@ -76,12 +76,12 @@ userSchema.methods.generateAccessToken = function () {
         },
         process.env.ACCESS_TOKEN_SECRET,
         {
-            expiresIn: process.env.ACCESS_TOKEN_EXPIRY
+            expiresIn: process.env.ACCESS_TOKEN_EXPIRES_IN
         }
     );
 };
 
-// 🔄 Custom Instance Method: Generates a long-lived Refresh Token
+//  Custom Instance Method: Generates a long-lived Refresh Token
 userSchema.methods.generateRefreshToken = function () {
     return jwt.sign(
         {
@@ -89,7 +89,7 @@ userSchema.methods.generateRefreshToken = function () {
         },
         process.env.REFRESH_TOKEN_SECRET,
         {
-            expiresIn: process.env.REFRESH_TOKEN_EXPIRY
+            expiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN
         }
     );
 };
