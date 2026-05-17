@@ -1,5 +1,11 @@
-import { v2 as cloudinary } from 'cloudinary'
-import fs from "fs"
+import { v2 as cloudinary } from 'cloudinary';
+import fs from "fs";
+import dotenv from "dotenv"; // ☘️ Explicitly import dotenv inside this utility
+
+// Force-load variables directly here to guarantee initialization sequence matches
+dotenv.config({
+    path: './.env'
+});
 
 cloudinary.config({ 
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME, 
@@ -9,24 +15,27 @@ cloudinary.config({
 
 const uploadOnCloudinary = async (localFilePath) => {
     try {
-        if (!localFilePath) return null
-        //upload the file on cloudinary
+        if (!localFilePath) return null;
+        
+        // Upload the file stream directly to Cloudinary core servers
         const response = await cloudinary.uploader.upload(localFilePath, {
             resource_type: "auto"
-        })
-        // file has been uploaded successfull
-        //console.log("file is uploaded on cloudinary ", response.url);
-        fs.unlinkSync(localFilePath)
+        });
+        
+        // Wipe the local temp file once cloud delivery confirmation arrives
+        fs.unlinkSync(localFilePath);
         return response;
 
     } catch (error) {
-        //fs.unlink(path, callback) (Asynchronous): It starts deleting the file in the background and lets the rest of your code keep running.
-        //fs.unlinkSync(path) (Synchronous): It stops everything and waits until the file is completely deleted before moving to the next line of code.
-        fs.unlinkSync(localFilePath) // remove the locally saved temporary file as the upload operation got failed
+        // Expose explicit storage service rejections in your terminal
+        console.error("🚨 CLOUDINARY UPLOAD FAULT:", error);
+        
+        // Defensive check: Only attempt unlinking if the file exists locally
+        if (fs.existsSync(localFilePath)) {
+            fs.unlinkSync(localFilePath);
+        }
         return null;
     }
-}
+};
 
-
-
-export {uploadOnCloudinary}
+export { uploadOnCloudinary };

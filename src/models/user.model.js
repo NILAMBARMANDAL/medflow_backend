@@ -54,11 +54,10 @@ const userSchema = new Schema(
 
 // 🔒 Pre-save Hook: Hashes the password automatically right before saving it to MongoDB
 userSchema.pre("save", async function (next) {
-    // Crucial: Only re-hash the password if the user actually modified the password field
     if (!this.isModified("password")) return next();
 
     this.password = await bcrypt.hash(this.password, 10);
-    next();
+   // next(); // ☘️ next is the first and only parameter, so this works perfectly!
 });
 
 // 🛠️ Custom Instance Method: Checks if the typed password matches the hashed database password
