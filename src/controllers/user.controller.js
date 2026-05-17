@@ -208,4 +208,99 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 
 })
-export { registerUser,  loginUser,logoutUser,refreshAccessToken };
+// ⚡ FEATURE 1: Get Current User Profile Data
+// WHY: When a user refreshes their dashboard, the frontend needs to pull their latest profile info immediately.
+const getCurrentUser = asyncHandler(async (req, res) => {
+    // WHY req.user works: Our verifyJWT middleware already ran, found the user from the token, and attached it to the request object!
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200, 
+                req.user, // Sends back the user info that verifyJWT fetched
+                "Current user fetched successfully"
+            )
+        );
+});
+
+// ⚡ FEATURE 2: Update Profile Text Details
+// WHY: Users need to update their full name or contact details without affecting passwords or re-uploading files.
+const updateAccountDetails = asyncHandler(async (req, res) => {
+    const { fullName, phoneNumber } = req.body;
+
+    // Validation check
+    if (!fullName || !phoneNumber) {
+        throw new ApiError(400, "All fields (fullName and phoneNumber) are required");
+    }
+
+    // WHY findByIdAndUpdate with $set: We use $set to change ONLY these specific fields. 
+    // This safely bypasses our password hashing hook so we don't accidentally encrypt an already encrypted password!
+    const user = await User.findByIdAndUpdate(
+        req.user?._id, // Got the ID from the verifyJWT bouncer
+        {
+            $set: {
+                fullName: fullName,
+                phoneNumber: phoneNumber
+            }
+        },
+        { 
+            new: true // This option forces MongoDB to return the NEW updated user document rather than the old one
+        }
+    ).select("-password -refreshToken"); // Securely strip out credentials before sending data back
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200, 
+                user, 
+                "Account details updated successfully"
+            )
+        );
+});
+// ⚡ FEATURE 3: Change Current Password
+// WHY: Users must be able to update their password securely by verifying their old password first.
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+
+    // 1. Validation check
+    if (!oldPassword || !newPassword) {
+        throw new ApiError(400, "Both old password and new password are required");
+    }
+
+    // 2. Fetch the user using the ID attached by the verifyJWT bouncer middleware
+    const user = await User.findById(req.user?._id);
+
+    // 3. Verify if the typed old password matches the database hash using our instance method
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
+    if (!isPasswordCorrect) {
+        throw new ApiError(400, "Invalid old password");
+    }
+
+    // 4. Assign the new unhashed password to the user object
+    user.password = newPassword;
+
+    // 5. Save the document back to MongoDB
+    // WHY validateBeforeSave: false? We only updated the password field. This option tells Mongoose 
+    // to skip validation checks on other fields (like avatar or phone) since we aren't re-uploading them here.
+    // This cleanly triggers our pre("save") hook to automatically hash the new password!
+    await user.save({ validateBeforeSave: false });
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200, 
+                {}, 
+                "Password changed successfully"
+            )
+        );
+});
+export { registerUser,
+      loginUser,
+      logoutUser,
+      refreshAccessToken
+      ,getCurrentUser,      
+    updateAccountDetails, 
+    changeCurrentPassword
+};
