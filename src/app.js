@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
+import appointmentRouter from "./routes/appointment.routes.js";
 const app = express();
 app.use(cors({
     origin:process.env.CORS_ORIGIN,
@@ -13,4 +14,6 @@ app.use(cookieParser());
 //routes import
 import userRouter from "./routes/user.routes.js";
 app.use("/api/v1/users",userRouter);
+app.use("/api/v1/appointments",appointmentRouter);
+
 export {app};
