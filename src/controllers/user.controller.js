@@ -296,11 +296,53 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
             )
         );
 });
+// ⚡ FEATURE 4: Update User Avatar Image
+// WHY: Users need to be able to change their profile picture seamlessly.
+const updateUserAvatar = asyncHandler(async (req, res) => {
+    // 1. Multer mounts single file uploads directly to req.file (NOT req.files)
+    const avatarLocalPath = req.file?.path;
+
+    if (!avatarLocalPath) {
+        throw new ApiError(400, "Avatar file is missing");
+    }
+
+    // 2. Upload the new local file stream up to Cloudinary
+    const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+    if (!avatar.url) {
+        throw new ApiError(400, "Error while uploading avatar to Cloudinary");
+    }
+
+    // 3. Update the avatar string inside MongoDB
+    const user = await User.findByIdAndUpdate(
+        req.user?._id, // Securely pulled from our verifyJWT bouncer
+        {
+            $set: {
+                avatar: avatar.url // Swapping the database URL link with the new one
+            }
+        },
+        { 
+            new: true // Returns the fresh updated document back to us
+        }
+    ).select("-password -refreshToken");
+
+    return res
+        .status(200)
+        .json(
+            new ApiResponse(
+                200, 
+                user, 
+                "Avatar image updated successfully"
+            )
+        );
+});
 export { registerUser,
       loginUser,
       logoutUser,
       refreshAccessToken
       ,getCurrentUser,      
+
     updateAccountDetails, 
-    changeCurrentPassword
+    changeCurrentPassword,
+    updateUserAvatar
 };
