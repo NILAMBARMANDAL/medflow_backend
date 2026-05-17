@@ -10,4 +10,7 @@ router.route("/register").post(
 
     ]),
     registerUser);
+router.route("/login").post(login);
+//secured routes (need access token)
+router.route("/logout").post(verifyJWT, logoutUser);
 export default router;
