@@ -1,3 +1,4 @@
+// 📑 src/models/review.model.js
 import mongoose, { Schema } from "mongoose";
 import { DoctorProfile } from "./doctorProfile.model.js";
 
@@ -5,7 +6,7 @@ const reviewSchema = new Schema(
     {
         patient: {
             type: Schema.Types.ObjectId,
-            ref: "User",
+            ref: "User", 
             required: true
         },
         doctor: {
@@ -35,6 +36,7 @@ const reviewSchema = new Schema(
     },
     { timestamps: true }
 );
+
 reviewSchema.statics.calculateAverageRating = async function (doctorId) {
     const stats = await this.aggregate([
         { $match: { doctor: doctorId } },
@@ -55,15 +57,18 @@ reviewSchema.statics.calculateAverageRating = async function (doctorId) {
                     averageRating: Math.round(stats[0].avgRating * 10) / 10, // Round to 1 decimal place
                     totalReviews: stats[0].nReviews
                 }
-            }
+            },
+            { returnDocument: 'after' } // 🎯 FIXED: Replaced deprecated hook configuration to clean console logs
         );
     } else {
         await DoctorProfile.findOneAndUpdate(
             { doctor: doctorId },
-            { $set: { averageRating: 0, totalReviews: 0 } }
+            { $set: { averageRating: 0, totalReviews: 0 } },
+            { returnDocument: 'after' } // 🎯 FIXED: Replaced deprecated hook configuration to clean console logs
         );
     }
 };
+
 reviewSchema.post("save", function () {
     this.constructor.calculateAverageRating(this.doctor);
 });

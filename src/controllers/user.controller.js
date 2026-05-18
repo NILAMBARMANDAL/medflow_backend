@@ -330,6 +330,60 @@ const searchAvailableDoctors = asyncHandler(async (req, res) => {
             )
         );
 });
+// 📑 Add these inside src/controllers/user.controller.js
+
+// 🔍 1. Fetch all doctors awaiting verification
+const getPendingDoctors = asyncHandler(async (req, res) => {
+    // Check if the accessing user is an admin
+    if (req.user?.role !== "admin") {
+        throw new ApiError(403, "Access denied. Admin authorization required.");
+    }
+
+    // Find all profiles where isVerified is false, and join their core User account data
+    // (Ensure you have imported your DoctorProfile model at the top of this file!)
+    const pendingDoctors = await DoctorProfile.find({ isVerified: false })
+        .populate("doctor", "fullName username email phoneNumber avatar sex");
+
+    return res.status(200).json(
+        new ApiResponse(200, pendingDoctors, "Pending doctor verifications retrieved successfully.")
+    );
+});
+
+// ⚡ 2. Approve or Reject Doctor Verification State
+const verifyDoctorProfile = asyncHandler(async (req, res) => {
+    const { profileId, action } = req.body; // action can be "approve" or "reject"
+
+    if (req.user?.role !== "admin") {
+        throw new ApiError(403, "Access denied. Admin authorization required.");
+    }
+
+    const profile = await DoctorProfile.findById(profileId);
+    if (!profile) {
+        throw new ApiError(404, "Doctor profile record not found.");
+    }
+
+    if (action === "approve") {
+        profile.isVerified = true;
+        await profile.save();
+        
+        // Ensure their base account role is active as a doctor
+        await User.findByIdAndUpdate(profile.doctor, { role: "doctor" });
+
+        return res.status(200).json(
+            new ApiResponse(200, profile, "Doctor has been successfully verified and activated! ✅")
+        );
+    } else if (action === "reject") {
+        const doctorUserId = profile.doctor;
+        await DoctorProfile.findByIdAndDelete(profileId);
+        await User.findByIdAndUpdate(doctorUserId, { role: "patient" }); // Fallback back to normal user
+
+        return res.status(200).json(
+            new ApiResponse(200, null, "Doctor profile onboarding request rejected and cleared. ❌")
+        );
+    }
+
+    throw new ApiError(400, "Invalid verification action type specified.");
+});
 export { 
     registerUser,
     loginUser,
@@ -339,5 +393,7 @@ export {
     updateAccountDetails, 
     changeCurrentPassword,
     updateUserAvatar,
-    searchAvailableDoctors
+    searchAvailableDoctors,
+    getPendingDoctors,
+    verifyDoctorProfile
 };

@@ -8,7 +8,9 @@ import {
     updateAccountDetails,
     changeCurrentPassword,
     updateUserAvatar,
-    searchAvailableDoctors 
+    searchAvailableDoctors ,
+    getPendingDoctors,
+    verifyDoctorProfile
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
@@ -32,5 +34,7 @@ router.route("/current-user").get(verifyJWT, getCurrentUser);
 router.route("/update-account").patch(verifyJWT, updateAccountDetails);
 router.route("/change-password").post(verifyJWT, changeCurrentPassword);
 router.route("/avatar").patch(verifyJWT, upload.single("avatar"), updateUserAvatar);
+router.route("/pending-doctors").get(verifyJWT, getPendingDoctors);
+router.route("/verify-doctor").patch(verifyJWT, verifyDoctorProfile);
 
 export default router; 

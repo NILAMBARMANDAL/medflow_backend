@@ -1,14 +1,13 @@
+// 📑 src/models/appointment.model.js
 import mongoose, { Schema } from "mongoose";
 
 const appointmentSchema = new Schema(
     {
-        
         patient: {
             type: Schema.Types.ObjectId,
             ref: "User", 
             required: true
         },
-     
         doctor: {
             type: Schema.Types.ObjectId,
             ref: "User",
@@ -31,6 +30,10 @@ const appointmentSchema = new Schema(
         },
         prescriptionNotes: {
             type: String,
+            default: ""
+        },
+        prescriptionUrl: { // 🎯 FIXED: Relocated inside the core fields block
+            type: String, 
             default: ""
         }
     },
