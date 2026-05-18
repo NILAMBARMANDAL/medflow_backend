@@ -3,10 +3,9 @@ import { ApiError } from "../utils/ApiError.js";
 import { User } from "../models/user.model.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
-import { DoctorProfile } from "../models/doctorProfile.model.js"; // 👈 Ensure this model is explicitly imported
+import { DoctorProfile } from "../models/doctorProfile.model.js"; 
 import jwt from "jsonwebtoken";
 
-// 🛠️ Helper function to generate clean login tokens
 const generateAccessTokenAndRefreshToken = async (userId) => {
     try {
         const user = await User.findById(userId);
@@ -22,15 +21,13 @@ const generateAccessTokenAndRefreshToken = async (userId) => {
     }
 };
 
-// ⚡ FEATURE 1: Unified Conditional Registration Pipeline
 const registerUser = asyncHandler(async (req, res) => {
-    // Step 1: Extract all parameters from the incoming multi-part form stream
+    
     const { 
         fullName, email, username, password, phoneNumber, role,
         specialization, experience, fees, qualifications, bio, availability 
     } = req.body;
 
-    // Step 2: Base Account Verification Checks
     if (
         [fullName, email, username, password, phoneNumber, role].some(
             (field) => field?.trim() === "" || field === undefined
@@ -39,38 +36,32 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All base account registration fields are required.");
     }
 
-    // Step 3: Guard System Against Bad Roles
     const validRoles = ["patient", "doctor", "admin"]; 
     const userRole = role.toLowerCase();
     if (!validRoles.includes(userRole)) {
         throw new ApiError(400, "Invalid system role specified.");
     }
-
-    // Step 3.5: Conditional Business Rule Checks for Professional Accounts
     if (userRole === "doctor") {
         if (!specialization || experience === undefined || fees === undefined || !qualifications) {
             throw new ApiError(400, "Medical profile fields (specialization, experience, fees, qualifications) are required for doctor accounts.");
         }
     }
 
-    // Step 4: Validate Account Uniqueness
     const existedUser = await User.findOne({ $or: [{ username }, { email }] });
     if (existedUser) {
         throw new ApiError(409, "User with this email or username already exists.");
     }
 
-    // Step 5: Route and Extract File Paths from Multer State
     const avatarLocalPath = req.files?.avatar?.[0]?.path;
     if (!avatarLocalPath) {
         throw new ApiError(400, "Profile avatar image file is required.");
     }
 
-    const certificateLocalPath = req.files?.certificate?.[0]?.path; // 👈 FIXED: Changed from medicalReports
+    const certificateLocalPath = req.files?.certificate?.[0]?.path; 
     if (userRole === "doctor" && !certificateLocalPath) {
         throw new ApiError(400, "Official medical registration certificate document is mandatory for doctor accounts.");
     }
 
-    // Step 6: Dispatch Asset Processing to Cloudinary CDN Storage
     const avatar = await uploadOnCloudinary(avatarLocalPath);
     if (!avatar) {
         throw new ApiError(500, "Failed to upload avatar to cloud storage.");
@@ -85,7 +76,6 @@ const registerUser = asyncHandler(async (req, res) => {
         certificateUrl = certificateFile.url;
     }
 
-    // Step 7: Instantiate and Save Core Identity Profile in MongoDB
     const user = await User.create({
         fullName,
         avatar: avatar.url,
@@ -101,23 +91,22 @@ const registerUser = asyncHandler(async (req, res) => {
         throw new ApiError(500, "Something went wrong while registering the account.");
     }
 
-    // Step 7.5: Branching Pipeline Execution — Create Dependent Doctor Record
     if (userRole === "doctor") {
         try {
             await DoctorProfile.create({
-                doctor: createdUser._id, // References the newly minted identity key
+                doctor: createdUser._id, 
                 specialization,
                 experience: Number(experience),
                 fees: Number(fees),
-                // Safe parsing mechanisms if inputs are passed over form-data strings
+              
                 qualifications: typeof qualifications === "string" ? JSON.parse(qualifications) : qualifications,
                 availability: typeof availability === "string" ? JSON.parse(availability) : (availability || []),
                 bio: bio || "",
                 medicalCertificate: certificateUrl,
-                isVerified: false // Explicitly locked out by default until admin review
+                isVerified: false 
             });
         } catch (error) {
-            // Automated Structural Rollback Engine: Destroys ghost account references if mapping folds
+         
             await User.findByIdAndDelete(createdUser._id);
             throw new ApiError(500, `Doctor profile mapping failed: ${error.message}. Account creation cancelled cleanly.`);
         }
@@ -134,7 +123,6 @@ const registerUser = asyncHandler(async (req, res) => {
     );
 });
 
-// ⚡ FEATURE 2: Login Interface Entry Point
 const loginUser = asyncHandler(async (req, res) => {
    const { email, username, password } = req.body;
    if (!(email || username)) {
@@ -167,7 +155,6 @@ const loginUser = asyncHandler(async (req, res) => {
     );
 });
 
-// ⚡ FEATURE 3: Account Session Exits
 const logoutUser = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,
@@ -187,7 +174,6 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "User logged Out"));
 });
 
-// ⚡ FEATURE 4: Refresh Access Security Tokens
 const refreshAccessToken = asyncHandler(async (req, res) => {
     const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
@@ -212,7 +198,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             secure: true
         };
     
-        // 👈 FIXED: Corrected execution mapping from 'generateAccessAndRefereshTokens' to match helper name
+        
         const { accessToken, refreshToken: newRefreshToken } = await generateAccessTokenAndRefreshToken(user._id);
     
         return res
@@ -227,17 +213,12 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 });
 
-// ⚡ FEATURE 5: Identity Diagnostics Retrieval
 const getCurrentUser = asyncHandler(async (req, res) => {
     return res
         .status(200)
         .json(new ApiResponse(200, req.user, "Current user fetched successfully"));
 });
 
-// 📑 src/controllers/user.controller.js
-
-// ⚡ FEATURE: Update Profile Core Text Parameters
-// WHY: Users change contact details or names over time.
 const updateAccountDetails = asyncHandler(async (req, res) => {
     const { fullName, phoneNumber } = req.body;
 
@@ -253,7 +234,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
         req.user?._id,
         { $set: updateFields },
         { new: true, runValidators: true }
-    ).select("-password"); // Explicitly drop password from response payload block
+    ).select("-password"); 
 
     return res
         .status(200)
@@ -262,7 +243,6 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
 
 
 
-// ⚡ FEATURE 7: Encryption Key Flipping Checkpoints
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
 
@@ -284,7 +264,6 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
         .json(new ApiResponse(200, {}, "Password changed successfully"));
 });
 
-// ⚡ FEATURE 8: Image Profile Updates
 const updateUserAvatar = asyncHandler(async (req, res) => {
     const avatarLocalPath = req.file?.path;
     if (!avatarLocalPath) {
@@ -306,13 +285,13 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
         .status(200)
         .json(new ApiResponse(200, user, "Avatar image updated successfully"));
 });
-// 📑 src/controllers/user.controller.js
+
 
 const searchAvailableDoctors = asyncHandler(async (req, res) => {
-    // 1. Extract standard search metrics along with page/limit parameters
+    
     const { specialization, maxFees, minExperience, page = 1, limit = 10 } = req.query;
 
-    // Convert query text indicators into clean integers
+    
     const pageNumber = Math.max(1, parseInt(page));
     const limitNumber = Math.max(1, parseInt(limit));
     const skipValue = (pageNumber - 1) * limitNumber;
@@ -329,14 +308,11 @@ const searchAvailableDoctors = asyncHandler(async (req, res) => {
         queryConditions.experience = { $gte: Number(minExperience) };
     }
 
-    // 2. Fetch paginated records
     const doctors = await DoctorProfile.find(queryConditions)
         .populate("doctor", "fullName email avatar phoneNumber")
         .select("-medicalCertificate")
         .skip(skipValue)
         .limit(limitNumber);
-
-    // Optional: Fetch grand totals so frontends can render exact pagination numbers
     const totalMatches = await DoctorProfile.countDocuments(queryConditions);
 
     return res

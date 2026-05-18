@@ -5,7 +5,7 @@ const appointmentSchema = new Schema(
         
         patient: {
             type: Schema.Types.ObjectId,
-            ref: "User", // Tells Mongoose to match this ID with the 'User' collection
+            ref: "User", 
             required: true
         },
      

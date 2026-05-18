@@ -10,7 +10,7 @@ const userSchema = new Schema(
             unique: true,
             lowercase: true,
             trim: true,
-            index: true // Makes searching this field in the database highly optimized
+            index: true 
         },
         email: {
             type: String,
@@ -25,7 +25,7 @@ const userSchema = new Schema(
             trim: true
         },
         avatar: {
-            type: String, // Cloudinary secure URL string
+            type: String, 
             required: true
         },
         phoneNumber: {
@@ -52,27 +52,23 @@ const userSchema = new Schema(
     }
 );
 
-// 🔒 Pre-save Hook: Hashes the password automatically right before saving it to MongoDB
-// 🔒 Pre-save Hook: Hashes the password automatically right before saving it to MongoDB
 userSchema.pre("save", async function () { 
     if (!this.isModified("password")) return; 
 
     this.password = await bcrypt.hash(this.password, 10);
 });
 
-// 🛠️ Custom Instance Method: Checks if the typed password matches the hashed database password
 userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password);
 };
 
-// 🎟️ Custom Instance Method: Generates a short-lived Access Token
 userSchema.methods.generateAccessToken = function () {
     return jwt.sign(
         {
             _id: this._id,
             email: this.email,
             username: this.username,
-            role: this.role // Injected role into the token for immediate access control checks
+            role: this.role 
         },
         process.env.ACCESS_TOKEN_SECRET,
         {
@@ -81,7 +77,6 @@ userSchema.methods.generateAccessToken = function () {
     );
 };
 
-//  Custom Instance Method: Generates a long-lived Refresh Token
 userSchema.methods.generateRefreshToken = function () {
     return jwt.sign(
         {

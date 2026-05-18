@@ -1,6 +1,6 @@
 import mongoose, { Schema } from "mongoose";
 
-// Sub-schema to handle specific availability slots cleanly
+
 const availabilitySchema = new Schema({
     day: {
         type: String,
@@ -8,7 +8,7 @@ const availabilitySchema = new Schema({
         enum: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     },
     slots: {
-        type: [String], // Array of strings representing time slots, e.g., ["09:00 AM", "10:30 AM", "04:00 PM"]
+        type: [String], 
         required: true
     }
 }, { _id: false }); 
@@ -55,7 +55,7 @@ const doctorProfileSchema = new Schema(
             default: false 
         },
         availability: [availabilitySchema],
-        // 🌟 FIXED: Placed cleanly inside the definition object block 🌟
+       
         averageRating: {
             type: Number,
             default: 0,
@@ -66,7 +66,7 @@ const doctorProfileSchema = new Schema(
             type: Number,
             default: 0
         }
-    }, // 👈 This curly brace now properly terminates all field objects
+    }, 
     {
         timestamps: true
     }

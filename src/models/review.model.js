@@ -10,7 +10,7 @@ const reviewSchema = new Schema(
         },
         doctor: {
             type: Schema.Types.ObjectId,
-            ref: "User", // Points to the core User ID of the doctor
+            ref: "User",
             required: true,
             index: true
         },
@@ -18,7 +18,7 @@ const reviewSchema = new Schema(
             type: Schema.Types.ObjectId,
             ref: "Appointment",
             required: true,
-            unique: true // One review per appointment session to prevent spamming
+            unique: true 
         },
         rating: {
             type: Number,
@@ -35,8 +35,6 @@ const reviewSchema = new Schema(
     },
     { timestamps: true }
 );
-
-// 🤖 MONGOOSE STATIC METHOD: Automatically aggregates and updates Doctor's average rating
 reviewSchema.statics.calculateAverageRating = async function (doctorId) {
     const stats = await this.aggregate([
         { $match: { doctor: doctorId } },
@@ -66,8 +64,6 @@ reviewSchema.statics.calculateAverageRating = async function (doctorId) {
         );
     }
 };
-
-// Trigger the calculation after a review is saved to the database
 reviewSchema.post("save", function () {
     this.constructor.calculateAverageRating(this.doctor);
 });

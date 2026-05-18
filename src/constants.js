@@ -1,1 +1,1 @@
-export const DB_NAME = "medflow"; // Name of the MongoDB database
+export const DB_NAME = "medflow"; 
