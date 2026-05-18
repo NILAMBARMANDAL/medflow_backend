@@ -1,15 +1,27 @@
-import mongoose from "mongoose"; // 👈 CRITICAL: Added to handle manual ObjectId conversions
+import mongoose from "mongoose"; 
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Appointment } from "../models/appointment.model.js";
+import { MedicalRecord } from "../models/medicalRecord.model.js";
 
-// ⚡ FEATURE 1: Book an Appointment (Unchanged, completely solid)
+
+
 const bookAppointment = asyncHandler(async (req, res) => {
     const { doctorId, appointmentDate, reasonForVisit } = req.body;
 
     if (!doctorId || !appointmentDate || !reasonForVisit) {
         throw new ApiError(400, "All fields (doctorId, appointmentDate, reasonForVisit) are required");
+    }
+
+    const slotCollision = await Appointment.findOne({
+        doctor: doctorId,
+        appointmentDate: appointmentDate,
+        status: { $in: ["pending", "scheduled"] }
+    });
+
+    if (slotCollision) {
+        throw new ApiError(409, "This time slot has already been reserved for this provider. Please select another slot.");
     }
 
     const appointment = await Appointment.create({
@@ -28,41 +40,32 @@ const bookAppointment = asyncHandler(async (req, res) => {
         .status(201)
         .json(new ApiResponse(201, appointment, "Appointment booked successfully"));
 });
-
-// ⚡ REFACTORED FEATURE 2: Get Appointments via Aggregation Pipeline
-// WHY: Instead of returning raw IDs, this links and shapes our data in one clean database pass.
 const getUserAppointments = asyncHandler(async (req, res) => {
     const userId = req.user?._id;
     const userRole = req.user?.role;
 
-    // Pick which field to match based on who is logged in
+  
     const matchField = userRole === "doctor" ? "doctor" : "patient";
 
     const appointments = await Appointment.aggregate([
         {
-            // STAGE 1: Match appointments belonging to the logged-in user
-            // We must wrap the ID in new mongoose.Types.ObjectId() or the aggregation won't match anything!
             $match: {
                 [matchField]: new mongoose.Types.ObjectId(userId)
             }
         },
         {
-            // STAGE 2: SQL-style JOIN with the users collection
-            // If I am the doctor, look up the patient's profile data (and vice-versa)
             $lookup: {
-                from: "users", // Must match the exact name of the collection in MongoDB Atlas
+                from: "users", 
                 localField: userRole === "doctor" ? "patient" : "doctor", 
                 foreignField: "_id",
                 as: "profileDetails"
             }
         },
         {
-            // STAGE 3: Flatten the profile details array into a clean object
+           
             $unwind: "$profileDetails"
         },
         {
-            // STAGE 4: Project and secure the final data shape
-            // 1 means keep the field; 0 means exclude it. This strips out passwords completely!
             $project: {
                 _id: 1,
                 appointmentDate: 1,
@@ -77,7 +80,6 @@ const getUserAppointments = asyncHandler(async (req, res) => {
             }
         },
         {
-            // STAGE 5: Sort by closest upcoming appointment date
             $sort: {
                 appointmentDate: 1
             }
@@ -94,10 +96,9 @@ const getUserAppointments = asyncHandler(async (req, res) => {
             )
         );
 });
-
-// ⚡ FEATURE 3: Update Status (Unchanged, completely solid)
 const updateAppointmentStatus = asyncHandler(async (req, res) => {
     const { appointmentId, newStatus, prescriptionNotes } = req.body;
+
 
     if (!appointmentId || !newStatus) {
         throw new ApiError(400, "Appointment ID and new status are required");
@@ -107,30 +108,55 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
         throw new ApiError(403, "Access denied. Only doctors or admins can perform this action");
     }
 
-    if (newStatus === "completed" && (!prescriptionNotes || prescriptionNotes.trim() === "")) {
+    const structuredStatus = newStatus.toLowerCase();
+
+    if (structuredStatus === "completed" && (!prescriptionNotes || prescriptionNotes.trim() === "")) {
         throw new ApiError(400, "Prescription notes are mandatory when completing an appointment");
     }
 
-    const updatedAppointment = await Appointment.findByIdAndUpdate(
-        appointmentId,
-        {
-            $set: {
-                status: newStatus,
-                prescriptionNotes: newStatus === "completed" ? prescriptionNotes : ""
-            }
-        },
-        { returnDocument: 'after' }
-    );
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+        throw new ApiError(404, "Appointment record not found");
+    }
 
-    if (!updatedAppointment) {
-        throw new ApiError(404, "Appointment not found");
+    if (appointment.doctor.toString() !== req.user?._id.toString() && req.user?.role !== "admin") {
+        throw new ApiError(403, "Unauthorized. You are not the assigned medical practitioner for this appointment.");
+    }
+
+    if (appointment.status === "completed") {
+        throw new ApiError(400, "This appointment has already been completed and closed.");
+    }
+
+ 
+    appointment.status = structuredStatus;
+    if (structuredStatus === "completed") {
+        appointment.prescriptionNotes = prescriptionNotes;
+    } else {
+        appointment.prescriptionNotes = ""; 
+    }
+    await appointment.save();
+    let medicalLockerEntry = null;
+    if (structuredStatus === "completed") {
+        medicalLockerEntry = await MedicalRecord.create({
+            patient: appointment.patient,
+            issuedBy: req.user?._id,
+            title: `Digital Prescription (Ref: Appointment #${appointment._id.toString().slice(-4)})`,
+            recordType: "Prescription",
+            description: prescriptionNotes,
+            attachments: ["system://digital-prescription-text"]
+        });
     }
 
     return res
         .status(200)
-        .json(new ApiResponse(200, updatedAppointment, `Appointment status updated to ${newStatus}`));
+        .json(
+            new ApiResponse(
+                200, 
+                { appointment, medicalLockerEntry }, 
+                `Appointment status successfully updated to ${structuredStatus}`
+            )
+        );
 });
-
 export {
     bookAppointment,
     getUserAppointments,
