@@ -41,8 +41,9 @@ const bookAppointment = asyncHandler(async (req, res) => {
         .json(new ApiResponse(201, appointment, "Appointment booked successfully"));
 });
 
-// 2. Fetch User Appointments
+// 2. Fetch User Appointments (With Dynamic Review Verification)
 const getUserAppointments = asyncHandler(async (req, res) => {
+    // Step A: Fetch base appointment records matching the current user context
     const appointments = await Appointment.find({ 
         $or: [
             { patient: req.user._id },
@@ -52,21 +53,31 @@ const getUserAppointments = asyncHandler(async (req, res) => {
     .populate("patient", "fullName avatar username email phoneNumber")
     .populate("doctor", "fullName avatar username email phoneNumber");
     
+    // Step B: Look up the Reviews model to cross-reference completed submissions
+    const ReviewModel = mongoose.models.Review || mongoose.model("Review");
+    const existingUserReviews = await ReviewModel.find({ patient: req.user._id });
+    
+    // Map reviewed documents down to a clean array of string IDs
+    const reviewedAppointmentIds = existingUserReviews.map(rev => rev.appointment.toString());
+
+    // Step C: Enhance the payload array with the live evaluation boolean flag state
+    const enhancedAppointments = appointments.map(appt => {
+        const apptObj = appt.toObject(); // Cast document down to mutable object literal
+        apptObj.isReviewed = reviewedAppointmentIds.includes(appt._id.toString());
+        return apptObj;
+    });
+
     return res.status(200).json(
-        new ApiResponse(200, appointments, "Appointments retrieved successfully")
+        new ApiResponse(200, enhancedAppointments, "Appointments retrieved successfully")
     );
 });
 
-// 3. Update Appointment Status (Pure JSON handler for text note closure)
+// 3. Update Appointment Status (Standard Text-Only Closure Input Pipeline)
 const updateAppointmentStatus = asyncHandler(async (req, res) => {
     if (!req.body) {
         throw new ApiError(400, "Request payload data body was not received or parsed correctly.");
     }
-    
     const { appointmentId, newStatus, prescriptionNotes } = req.body;
-
-    // Safe fallback check to capture any text field variations passed over the body array
-    const activeNotes = prescriptionNotes || req.body.notes || req.body.clinicalNotes || "";
 
     if (!appointmentId || !newStatus) {
         throw new ApiError(400, "Appointment ID and new status are required fields.");
@@ -77,6 +88,7 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
     }
 
     const structuredStatus = newStatus.toLowerCase();
+    const activeNotes = prescriptionNotes || req.body.notes || req.body.clinicalNotes || "";
 
     if (structuredStatus === "completed" && (!activeNotes || activeNotes.trim() === "")) {
         throw new ApiError(400, "Prescription notes are mandatory when completing an appointment");
@@ -96,25 +108,24 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
     }
 
     appointment.status = structuredStatus;
-    let medicalLockerEntry = null;
-
     if (structuredStatus === "completed") {
         appointment.prescriptionNotes = activeNotes.trim();
-        
-        // Log the text note directly inside the health records archive tracker
+    } else {
+        appointment.prescriptionNotes = ""; 
+    }
+    await appointment.save();
+    
+    let medicalLockerEntry = null;
+    if (structuredStatus === "completed") {
         medicalLockerEntry = await MedicalRecord.create({
             patient: appointment.patient,
             issuedBy: req.user?._id,
             title: `Digital Prescription (Ref: Appointment #${appointment._id.toString().slice(-4)})`,
             recordType: "Prescription",
             description: activeNotes.trim(),
-            attachments: ["system://digital-prescription-text"] 
+            attachments: ["system://digital-prescription-text"]
         });
-    } else {
-        appointment.prescriptionNotes = ""; 
     }
-
-    await appointment.save();
 
     return res
         .status(200)
