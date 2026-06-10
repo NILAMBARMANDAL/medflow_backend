@@ -1,21 +1,21 @@
-
 import { Router } from "express";
 import { 
+    createOrUpdateDoctorProfile,
     getMyDoctorProfile, 
-    verifyDoctorProfile, 
     getDoctorAnalytics 
 } from "../controllers/doctorProfile.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const router = Router();
 
 router.use(verifyJWT);
 
 
-router.route("/profile").get(getMyDoctorProfile);
-router.route("/analytics").get(getDoctorAnalytics); // 👈 📊 Add this secure route
+router.route("/profile")
+    .get(getMyDoctorProfile)
+    .post(upload.single("certificate"), createOrUpdateDoctorProfile);
 
-
-router.route("/verify/:doctorId").patch(verifyDoctorProfile);
+router.route("/analytics").get(getDoctorAnalytics);
 
 export default router;

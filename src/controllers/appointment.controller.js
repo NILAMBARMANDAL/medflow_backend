@@ -1,5 +1,5 @@
 // 📑 src/controllers/appointment.controller.js
-import mongoose from "mongoose"; 
+import mongoose from "mongoose";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -14,6 +14,7 @@ const bookAppointment = asyncHandler(async (req, res) => {
         throw new ApiError(400, "All fields (doctorId, appointmentDate, reasonForVisit) are required");
     }
 
+    
     const slotCollision = await Appointment.findOne({
         doctor: doctorId,
         appointmentDate: appointmentDate,
@@ -24,13 +25,24 @@ const bookAppointment = asyncHandler(async (req, res) => {
         throw new ApiError(409, "This time slot has already been reserved for this provider. Please select another slot.");
     }
 
-    const appointment = await Appointment.create({
-        patient: req.user?._id,
-        doctor: doctorId,
-        appointmentDate,
-        reasonForVisit,
-        status: "pending"
-    });
+    // The real guarantee: the unique partial index on (doctor, appointmentDate) atomically
+    // prevents double-booking even under concurrent requests that both pass the check above.
+    let appointment;
+    try {
+        appointment = await Appointment.create({
+            patient: req.user?._id,
+            doctor: doctorId,
+            appointmentDate,
+            reasonForVisit,
+            status: "pending"
+        });
+    } catch (error) {
+        // MongoDB duplicate-key error code — the unique index rejected a racing double-booking.
+        if (error.code === 11000) {
+            throw new ApiError(409, "This time slot has already been reserved for this provider. Please select another slot.");
+        }
+        throw error; // any other error bubbles up to the global error handler
+    }
 
     if (!appointment) {
         throw new ApiError(500, "Something went wrong while booking the appointment");
@@ -44,7 +56,7 @@ const bookAppointment = asyncHandler(async (req, res) => {
 // 2. Fetch User Appointments (With Dynamic Review Verification)
 const getUserAppointments = asyncHandler(async (req, res) => {
     // Step A: Fetch base appointment records matching the current user context
-    const appointments = await Appointment.find({ 
+    const appointments = await Appointment.find({
         $or: [
             { patient: req.user._id },
             { doctor: req.user._id }
@@ -52,11 +64,11 @@ const getUserAppointments = asyncHandler(async (req, res) => {
     })
     .populate("patient", "fullName avatar username email phoneNumber")
     .populate("doctor", "fullName avatar username email phoneNumber");
-    
+
     // Step B: Look up the Reviews model to cross-reference completed submissions
     const ReviewModel = mongoose.models.Review || mongoose.model("Review");
     const existingUserReviews = await ReviewModel.find({ patient: req.user._id });
-    
+
     // Map reviewed documents down to a clean array of string IDs
     const reviewedAppointmentIds = existingUserReviews.map(rev => rev.appointment.toString());
 
@@ -111,10 +123,10 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
     if (structuredStatus === "completed") {
         appointment.prescriptionNotes = activeNotes.trim();
     } else {
-        appointment.prescriptionNotes = ""; 
+        appointment.prescriptionNotes = "";
     }
     await appointment.save();
-    
+
     let medicalLockerEntry = null;
     if (structuredStatus === "completed") {
         medicalLockerEntry = await MedicalRecord.create({
@@ -131,8 +143,8 @@ const updateAppointmentStatus = asyncHandler(async (req, res) => {
         .status(200)
         .json(
             new ApiResponse(
-                200, 
-                { appointment, medicalLockerEntry }, 
+                200,
+                { appointment, medicalLockerEntry },
                 `Appointment status successfully updated to ${structuredStatus}`
             )
         );

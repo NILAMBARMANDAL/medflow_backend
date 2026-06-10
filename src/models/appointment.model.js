@@ -32,7 +32,7 @@ const appointmentSchema = new Schema(
             type: String,
             default: ""
         },
-        prescriptionUrl: { // 🎯 FIXED: Relocated inside the core fields block
+        prescriptionUrl: { 
             type: String, 
             default: ""
         }
@@ -41,5 +41,11 @@ const appointmentSchema = new Schema(
         timestamps: true
     }
 );
-
+appointmentSchema.index(
+    { doctor: 1, appointmentDate: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { status: { $in: ["pending", "scheduled"] } }
+    }
+);
 export const Appointment = mongoose.model("Appointment", appointmentSchema);
