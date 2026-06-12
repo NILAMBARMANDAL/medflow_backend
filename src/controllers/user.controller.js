@@ -144,7 +144,8 @@ const loginUser = asyncHandler(async (req, res) => {
    
    const options = {
         httpOnly: true,
-        secure: true
+        secure: true,
+         sameSite: "None"
    };
    
    return res.status(200)
@@ -184,7 +185,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     try {
         const decodedToken = jwt.verify(incomingRefreshToken, process.env.REFRESH_TOKEN_SECRET);
         const user = await User.findById(decodedToken?._id);
-    
+        
         if (!user) {
             throw new ApiError(401, "Invalid refresh token");
         }
